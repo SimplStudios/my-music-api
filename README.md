@@ -94,9 +94,24 @@ CREATE POLICY "Allow all access to settings" ON settings
 
 3. Go to **Storage** → Create a new bucket called **`music`**
 4. Toggle **Public bucket** ON
-5. Under the bucket's **Policies**, add two policies:
-   - **Allow all uploads** → Operation: `INSERT` → Target role: `anon` → Policy: `true`
-   - **Allow all deletes** → Operation: `DELETE` → Target role: `anon` → Policy: `true`
+5. Go back to the **SQL Editor** and run this to create storage policies:
+
+```sql
+-- Allow anyone to read files (so your games can play the audio)
+CREATE POLICY "Public read access"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'music');
+
+-- Allow uploads (your admin panel needs this)
+CREATE POLICY "Allow uploads"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'music');
+
+-- Allow deletes (so you can remove tracks)
+CREATE POLICY "Allow deletes"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'music');
+```
 
 ### Step 3: Deploy to Vercel
 
