@@ -2,6 +2,7 @@
 // Example: /api/random?tag=battle
 
 import { supabase } from "@/lib/supabase";
+import { isApiEnabled } from "@/lib/checkApi";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -10,6 +11,10 @@ export default async function handler(req, res) {
 
   if (!supabase) {
     return res.status(500).json({ error: "Supabase not configured" });
+  }
+
+  if (!(await isApiEnabled())) {
+    return res.status(503).json({ error: "API is currently disabled by the administrator." });
   }
 
   const { tag } = req.query;

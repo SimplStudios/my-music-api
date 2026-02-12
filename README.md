@@ -70,6 +70,28 @@ CREATE POLICY "Allow all deletes" ON tracks
   FOR DELETE USING (true);
 ```
 
+Then run this to create the **settings** table (for profile, password override, and API kill switch):
+
+```sql
+-- Create the settings table
+CREATE TABLE settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  username TEXT DEFAULT 'Admin',
+  api_enabled BOOLEAN DEFAULT true,
+  password_override TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT single_row CHECK (id = 1)
+);
+
+INSERT INTO settings (id) VALUES (1);
+
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all access to settings" ON settings
+  USING (true) WITH CHECK (true);
+```
+
 3. Go to **Storage** → Create a new bucket called **`music`**
 4. Toggle **Public bucket** ON
 5. Under the bucket's **Policies**, add two policies:

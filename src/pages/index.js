@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Head from "next/head";
 
 export default function HomePage() {
   const [tracks, setTracks] = useState([]);
@@ -9,130 +10,225 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchTracks();
-  }, [activeTag]);
+  }, []);
 
   const fetchTracks = async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (activeTag) params.set("tag", activeTag);
-    if (search) params.set("search", search);
+    try {
+      const res = await fetch("/api/tracks");
+      if (res.ok) {
+        const data = await res.json();
+        const t = data.tracks || [];
+        setTracks(t);
 
-    const res = await fetch(`/api/tracks?${params}`);
-    const data = await res.json();
-    const fetched = data.tracks || [];
-    setTracks(fetched);
-
-    // Collect all unique tags
-    const tagSet = new Set();
-    fetched.forEach((t) => t.tags?.forEach((tag) => tagSet.add(tag)));
-    setAllTags([...tagSet].sort());
-
+        // Collect all unique tags
+        const tagSet = new Set();
+        t.forEach((track) =>
+          track.tags?.forEach((tag) => tagSet.add(tag))
+        );
+        setAllTags([...tagSet].sort());
+      }
+    } catch {}
     setLoading(false);
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    fetchTracks();
-  };
+  const filtered = tracks.filter((t) => {
+    const matchSearch =
+      !search || t.title.toLowerCase().includes(search.toLowerCase());
+    const matchTag = !activeTag || t.tags?.includes(activeTag);
+    return matchSearch && matchTag;
+  });
+
+  function formatBytes(bytes) {
+    if (!bytes) return "";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(1) + " MB";
+  }
+
+  const baseUrl =
+    typeof window !== "undefined" ? window.location.origin : "";
 
   return (
-    <div className="container">
-      <h1>� MyMusicAPI</h1>
-      <p className="subtitle">
-        Your music. Your API. Your games.
-      </p>
-      <p className="subtitle">
-        <a href="/admin">Admin Panel →</a>
-      </p>
-
-      {/* Search */}
-      <form onSubmit={handleSearch} className="search-bar">
-        <input
-          type="text"
-          placeholder="Search tracks..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+    <>
+      <Head>
+        <title>MyMusicAPI — Free Music API for Games</title>
+        <meta
+          name="description"
+          content="Open-source music API for HTML games. Browse, stream, and integrate game-ready tracks with a simple REST API."
         />
-        <button type="submit">Search</button>
-      </form>
+      </Head>
 
-      {/* Tag Filter */}
-      {allTags.length > 0 && (
-        <div className="tag-filter">
-          <button
-            className={`tag-btn ${!activeTag ? "active" : ""}`}
-            onClick={() => setActiveTag("")}
-          >
-            All
-          </button>
-          {allTags.map((tag) => (
-            <button
-              key={tag}
-              className={`tag-btn ${activeTag === tag ? "active" : ""}`}
-              onClick={() => setActiveTag(activeTag === tag ? "" : tag)}
+      <div className="public-page">
+        {/* Header */}
+        <header className="public-header">
+          <h1>
+            My<span className="blue">Music</span>API
+          </h1>
+          <p className="subtitle">
+            Open-source music API for your games — built by SimplStudios
+          </p>
+          <div className="header-links">
+            <a
+              href="https://github.com/SimplStudios/my-music-api"
+              className="btn btn-secondary btn-sm"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              {tag}
+              📦 GitHub
+            </a>
+            <a
+              href="https://cash.app/$simplstudiosofficial"
+              className="btn btn-primary btn-sm"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ♥ Donate
+            </a>
+            <a href="/admin" className="btn btn-ghost btn-sm">
+              Admin →
+            </a>
+          </div>
+        </header>
+
+        {/* Search */}
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search tracks…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Tag filter */}
+        {allTags.length > 0 && (
+          <div className="tag-filter">
+            <button
+              className={`tag-btn ${activeTag === "" ? "active" : ""}`}
+              onClick={() => setActiveTag("")}
+            >
+              All
             </button>
-          ))}
-        </div>
-      )}
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                className={`tag-btn ${activeTag === tag ? "active" : ""}`}
+                onClick={() => setActiveTag(activeTag === tag ? "" : tag)}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
 
-      {/* Tracks */}
-      {loading ? (
-        <p>Loading...</p>
-      ) : tracks.length === 0 ? (
-        <p>No tracks found.</p>
-      ) : (
-        <div className="track-list">
-          {tracks.map((track) => (
-            <div key={track.id} className="track-item">
-              <div className="track-info">
-                <strong>{track.title}</strong>
-                <div className="track-meta">
-                  {track.tags?.map((tag) => (
-                    <span key={tag} className="tag">
-                      {tag}
-                    </span>
-                  ))}
+        {/* Track list */}
+        {loading ? (
+          <div className="loading-text">Loading tracks…</div>
+        ) : filtered.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">♫</div>
+            <p>
+              {search || activeTag
+                ? "No tracks match your filter."
+                : "No tracks uploaded yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="track-list">
+            {filtered.map((track, i) => (
+              <div className="track-item" key={track.id}>
+                <span className="track-number">{i + 1}</span>
+                <div className="track-info">
+                  <div className="track-title">{track.title}</div>
+                  <div className="track-meta">
+                    {track.tags?.map((tag) => (
+                      <span key={tag} className="tag">
+                        {tag}
+                      </span>
+                    ))}
+                    {track.file_size && (
+                      <span className="track-size">
+                        {formatBytes(track.file_size)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <audio controls src={track.file_url} preload="none" />
+                <div className="track-actions">
+                  {track.file_url && (
+                    <audio controls preload="none">
+                      <source
+                        src={track.file_url}
+                        type={track.mime_type || "audio/mpeg"}
+                      />
+                    </audio>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
+
+        {/* API usage example */}
+        <div className="code-card">
+          <div className="code-card-header">
+            <span>💻</span>
+            <h3>Use in Your Game</h3>
+          </div>
+          <pre>{`// Fetch all tracks
+fetch("${baseUrl || "https://your-app.vercel.app"}/api/tracks")
+  .then(res => res.json())
+  .then(data => {
+    const tracks = data.tracks;
+    const audio = new Audio(tracks[0].file_url);
+    audio.play();
+  });
+
+// Get a random track
+fetch("${baseUrl || "https://your-app.vercel.app"}/api/random")
+  .then(res => res.json())
+  .then(data => {
+    const audio = new Audio(data.track.file_url);
+    audio.play();
+  });
+
+// Filter by tag
+fetch("${baseUrl || "https://your-app.vercel.app"}/api/tracks?tag=battle")
+  .then(res => res.json())
+  .then(data => console.log(data.tracks));`}</pre>
         </div>
-      )}
 
-      {/* API Info */}
-      <div className="card api-card">
-        <h3>Use in your games</h3>
-        <pre>{`// Fetch all tracks
-const res = await fetch("${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/tracks");
-const { tracks } = await res.json();
-
-// Play a random battle track
-const res2 = await fetch("/api/random?tag=battle");
-const { track } = await res2.json();
-const audio = new Audio(track.file_url);
-audio.play();`}</pre>
+        {/* Footer */}
+        <footer className="footer">
+          <p>
+            Built with ♥ by{" "}
+            <a
+              href="https://simplstudios.vercel.app"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              SimplStudios
+            </a>
+          </p>
+          <p>
+            <a
+              href="https://github.com/SimplStudios/my-music-api"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              GitHub
+            </a>
+            {" · "}
+            <a
+              href="https://cash.app/$simplstudiosofficial"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Donate
+            </a>
+          </p>
+        </footer>
       </div>
-
-      <footer className="footer">
-        <p>
-          Built by{" "}
-          <a href="https://simplstudios.vercel.app" target="_blank" rel="noopener noreferrer">
-            SimplStudios
-          </a>
-        </p>
-        <p>
-          <a href="https://cash.app/$simplstudiosofficial" target="_blank" rel="noopener noreferrer">
-            Donate ☕
-          </a>
-          {" · "}
-          <a href="https://github.com/simplstudios/my-music-api" target="_blank" rel="noopener noreferrer">
-            GitHub
-          </a>
-        </p>
-      </footer>
-    </div>
+    </>
   );
 }
