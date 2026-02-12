@@ -7,6 +7,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (!supabase) {
+    return res.status(500).json({ error: "Supabase not configured" });
+  }
+
   const { id } = req.query;
 
   const { data, error } = await supabase

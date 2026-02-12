@@ -6,6 +6,14 @@ import { IncomingForm } from "formidable";
 import fs from "fs";
 import path from "path";
 
+function checkSupabase(res) {
+  if (!supabase) {
+    res.status(500).json({ error: "Supabase not configured" });
+    return false;
+  }
+  return true;
+}
+
 export const config = {
   api: {
     bodyParser: false, // we handle file parsing ourselves
@@ -29,6 +37,8 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+
+  if (!checkSupabase(res)) return;
 
   // Check admin password
   const password = req.headers["x-admin-password"];

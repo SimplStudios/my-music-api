@@ -7,6 +7,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (!supabase) {
+    return res.status(500).json({ error: "Supabase not configured" });
+  }
+
   const password = req.headers["x-admin-password"];
   if (password !== process.env.ADMIN_PASSWORD) {
     return res.status(401).json({ error: "Unauthorized" });
