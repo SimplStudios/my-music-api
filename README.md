@@ -194,31 +194,48 @@ async function loadPlaylist(tag) {
 }
 ```
 
-### Simple music manager class
+### Full GameMusic class
 ```javascript
 class GameMusic {
   constructor(apiBase) {
     this.api = apiBase;
-    this.current = null;
+    this.audio = new Audio();
+    this.audio.loop = true;
+    this.audio.volume = 0.4;
+    this.tracks = [];
+    this.current = 0;
   }
 
-  async play(tag) {
-    if (this.current) this.current.pause();
-    const res = await fetch(`${this.api}/api/random?tag=${tag}`);
-    const { track } = await res.json();
-    this.current = new Audio(track.file_url);
-    this.current.loop = true;
-    this.current.play();
+  async loadPlaylist(tag = "") {
+    const url = tag
+      ? this.api + "/api/tracks?tag=" + tag
+      : this.api + "/api/tracks";
+    const res = await fetch(url);
+    const data = await res.json();
+    this.tracks = data.tracks || [];
   }
 
-  stop() {
-    if (this.current) this.current.pause();
+  play(index) {
+    if (index !== undefined) this.current = index;
+    if (!this.tracks[this.current]) return;
+    this.audio.src = this.tracks[this.current].file_url;
+    this.audio.play();
   }
+
+  pause()  { this.audio.pause(); }
+  resume() { this.audio.play(); }
+  next()   { this.current = (this.current + 1) % this.tracks.length; this.play(); }
+  prev()   { this.current = (this.current - 1 + this.tracks.length) % this.tracks.length; this.play(); }
+
+  setVolume(v) { this.audio.volume = Math.max(0, Math.min(1, v)); }
 }
 
 // Usage
 const music = new GameMusic("https://your-app.vercel.app");
-music.play("battle");
+await music.loadPlaylist("battle");
+music.play();        // play first track
+music.next();        // skip to next
+music.setVolume(0.7);// adjust volume
 ```
 
 ---

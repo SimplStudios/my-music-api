@@ -1,85 +1,96 @@
-import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
-import Head from "next/head";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { supabase } from "@/lib/supabase";
+import {
+  Upload,
+  Library,
+  Settings,
+  BookOpen,
+  Music,
+  Menu,
+  X,
+  LogOut,
+  RefreshCw,
+  Trash2,
+  User,
+  Lock,
+  Power,
+  Radio,
+  AlertTriangle,
+  Copy,
+  Check,
+  ChevronRight,
+  Code,
+  ExternalLink,
+  Loader,
+  Search,
+  FileAudio,
+  CheckCircle,
+  XCircle,
+  Globe,
+  Zap,
+  Shuffle,
+  Tag,
+  Hash,
+  Play,
+} from "lucide-react";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabaseClient =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : null;
-
+/* ===== Nav Items ===== */
 const NAV_ITEMS = [
-  { id: "upload", label: "Upload", icon: "⬆" },
-  { id: "library", label: "Library", icon: "♫" },
-  { id: "settings", label: "Settings", icon: "⚙" },
+  { id: "upload", label: "Upload", icon: Upload, section: "manage" },
+  { id: "library", label: "Library", icon: Library, section: "manage" },
+  { id: "docs", label: "API Docs", icon: BookOpen, section: "manage" },
+  { id: "settings", label: "Settings", icon: Settings, section: "system" },
 ];
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-const ALLOWED_TYPES = [
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/wav",
-  "audio/ogg",
-  "audio/flac",
-  "audio/aac",
-  "audio/webm",
-  "audio/x-m4a",
-  "audio/mp4",
-];
-
-function formatBytes(bytes) {
-  if (!bytes) return "";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / 1048576).toFixed(1) + " MB";
-}
 
 export default function AdminPage() {
-  // ── Auth ──
+  /* ===== State ===== */
+  const [authed, setAuthed] = useState(false);
   const [password, setPassword] = useState("");
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [authError, setAuthError] = useState("");
-  const [authLoading, setAuthLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
 
-  // ── Nav ──
-  const [activeView, setActiveView] = useState("upload");
+  const [view, setView] = useState("upload");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // ── Upload ──
-  const [file, setFile] = useState(null);
+  // Upload
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
+  const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState("");
-  const [uploadMsgType, setUploadMsgType] = useState("success");
+  const [uploadMsg, setUploadMsg] = useState(null);
 
-  // ── Library ──
+  // Library
   const [tracks, setTracks] = useState([]);
-  const [tracksLoading, setTracksLoading] = useState(false);
+  const [loadingTracks, setLoadingTracks] = useState(false);
+  const [librarySearch, setLibrarySearch] = useState("");
 
-  // ── Settings ──
-  const [username, setUsername] = useState("Admin");
-  const [editUsername, setEditUsername] = useState("");
+  // Settings
+  const [settings, setSettings] = useState({ username: "Admin", api_enabled: true });
+  const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [apiEnabled, setApiEnabled] = useState(true);
-  const [settingsMsg, setSettingsMsg] = useState("");
-  const [settingsMsgType, setSettingsMsgType] = useState("success");
-  const [saving, setSaving] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState(null);
 
-  // ── API Status ──
-  const [apiStatus, setApiStatus] = useState("checking"); // online | offline | disabled | checking
+  // API status
+  const [apiStatus, setApiStatus] = useState("checking");
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
-  // ──────── Auth ────────
-  const login = async (e) => {
+  // Copy state for docs
+  const [copiedId, setCopiedId] = useState(null);
+
+  /* ===== Helpers ===== */
+  const adminPassword = useRef(password);
+
+  const authHeaders = useCallback(() => ({
+    "Content-Type": "application/json",
+    "x-admin-password": adminPassword.current,
+  }), []);
+
+  /* ===== Login ===== */
+  async function handleLogin(e) {
     e.preventDefault();
-    if (!password.trim()) {
-      setAuthError("Please enter your admin password.");
-      return;
-    }
-    setAuthLoading(true);
-    setAuthError("");
+    setLoginError("");
+    setLoggingIn(true);
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
@@ -87,244 +98,44 @@ export default function AdminPage() {
         body: JSON.stringify({ password }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setIsAuthed(true);
-        setUsername(data.username || "Admin");
-        setEditUsername(data.username || "Admin");
-        setApiEnabled(data.api_enabled !== false);
-        fetchTracks();
-        checkApiStatus();
+      if (res.ok && data.success) {
+        adminPassword.current = password;
+        setAuthed(true);
       } else {
-        setAuthError(data.error || "Invalid admin password.");
+        setLoginError(data.error || "Invalid password");
       }
     } catch {
-      setAuthError("Unable to connect. Check your deployment and try again.");
+      setLoginError("Network error — check your connection");
     }
-    setAuthLoading(false);
-  };
+    setLoggingIn(false);
+  }
 
-  // ──────── Tracks ────────
+  /* ===== Fetch tracks ===== */
   const fetchTracks = useCallback(async () => {
-    setTracksLoading(true);
+    setLoadingTracks(true);
     try {
       const res = await fetch("/api/tracks");
-      if (res.ok) {
-        const data = await res.json();
-        setTracks(data.tracks || []);
-      }
-    } catch {}
-    setTracksLoading(false);
+      const data = await res.json();
+      setTracks(data.tracks || []);
+    } catch { setTracks([]); }
+    setLoadingTracks(false);
   }, []);
 
-  const deleteTrack = async (id) => {
-    if (!confirm("Delete this track?")) return;
+  /* ===== Fetch settings ===== */
+  const fetchSettings = useCallback(async () => {
     try {
-      const res = await fetch(`/api/delete/${id}`, {
-        method: "DELETE",
-        headers: { "x-admin-password": password },
-      });
+      const res = await fetch("/api/settings", { headers: authHeaders() });
       if (res.ok) {
-        setTracks((prev) => prev.filter((t) => t.id !== id));
+        const data = await res.json();
+        setSettings(data);
+        setNewUsername(data.username || "Admin");
       }
     } catch {}
-  };
+  }, [authHeaders]);
 
-  // ──────── Upload ────────
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return setFile(null);
-    if (f.size > MAX_FILE_SIZE) {
-      setUploadMsg(
-        `File too large (${formatBytes(f.size)}). Maximum is ${formatBytes(MAX_FILE_SIZE)}.`
-      );
-      setUploadMsgType("error");
-      setFile(null);
-      return;
-    }
-    if (!ALLOWED_TYPES.includes(f.type) && !f.name.match(/\.(mp3|wav|ogg|flac|aac|webm|m4a)$/i)) {
-      setUploadMsg("Only audio files (MP3, WAV, OGG, FLAC, AAC, WebM, M4A) are supported.");
-      setUploadMsgType("error");
-      setFile(null);
-      return;
-    }
-    setFile(f);
-    setUploadMsg("");
-    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
-  };
-
-  const upload = async (e) => {
-    e.preventDefault();
-    if (!file || !title.trim()) {
-      setUploadMsg("Please provide a file and a title.");
-      setUploadMsgType("error");
-      return;
-    }
-    if (!supabaseClient) {
-      setUploadMsg("Supabase not configured. Check your environment variables.");
-      setUploadMsgType("error");
-      return;
-    }
-
-    setUploading(true);
-    setUploadMsg("Uploading to Supabase Storage…");
-    setUploadMsgType("success");
-
-    try {
-      const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const { error: storageErr } = await supabaseClient.storage
-        .from("music")
-        .upload(safeName, file, { contentType: file.type });
-
-      if (storageErr) throw new Error(storageErr.message);
-
-      const { data: urlData } = supabaseClient.storage.from("music").getPublicUrl(safeName);
-      const fileUrl = urlData.publicUrl;
-
-      setUploadMsg("Saving track metadata…");
-
-      const tagArray = tags
-        .split(",")
-        .map((t) => t.trim().toLowerCase())
-        .filter(Boolean);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-password": password,
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          file_name: safeName,
-          file_url: fileUrl,
-          tags: tagArray,
-          file_size: file.size,
-          mime_type: file.type,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      setUploadMsg(`"${title.trim()}" uploaded successfully!`);
-      setUploadMsgType("success");
-      setFile(null);
-      setTitle("");
-      setTags("");
-      fetchTracks();
-
-      // Reset file input
-      const fileInput = document.getElementById("file-input");
-      if (fileInput) fileInput.value = "";
-    } catch (err) {
-      setUploadMsg(err.message);
-      setUploadMsgType("error");
-    }
-    setUploading(false);
-  };
-
-  // ──────── Settings ────────
-  const saveProfile = async () => {
-    if (!editUsername.trim()) {
-      setSettingsMsg("Username cannot be empty.");
-      setSettingsMsgType("error");
-      return;
-    }
-    setSaving(true);
-    setSettingsMsg("");
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-password": password,
-        },
-        body: JSON.stringify({ username: editUsername.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setUsername(data.username);
-        setSettingsMsg("Username updated!");
-        setSettingsMsgType("success");
-      } else {
-        setSettingsMsg(data.error || "Failed to update.");
-        setSettingsMsgType("error");
-      }
-    } catch {
-      setSettingsMsg("Unable to save. Check connection.");
-      setSettingsMsgType("error");
-    }
-    setSaving(false);
-  };
-
-  const changePassword = async () => {
-    if (!newPassword.trim()) {
-      setSettingsMsg("Enter a new password.");
-      setSettingsMsgType("error");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setSettingsMsg("Passwords do not match.");
-      setSettingsMsgType("error");
-      return;
-    }
-    if (newPassword.length < 6) {
-      setSettingsMsg("Password must be at least 6 characters.");
-      setSettingsMsgType("error");
-      return;
-    }
-    setSaving(true);
-    setSettingsMsg("");
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-password": password,
-        },
-        body: JSON.stringify({ new_password: newPassword }),
-      });
-      const data = await res.json();
-      if (res.ok && data.password_changed) {
-        setPassword(newPassword); // Keep session alive with new password
-        setNewPassword("");
-        setConfirmPassword("");
-        setSettingsMsg("Password changed successfully!");
-        setSettingsMsgType("success");
-      } else {
-        setSettingsMsg(data.error || "Failed to change password.");
-        setSettingsMsgType("error");
-      }
-    } catch {
-      setSettingsMsg("Unable to save. Check connection.");
-      setSettingsMsgType("error");
-    }
-    setSaving(false);
-  };
-
-  const toggleApi = async (enabled) => {
-    setApiEnabled(enabled);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-password": password,
-        },
-        body: JSON.stringify({ api_enabled: enabled }),
-      });
-      if (res.ok) {
-        setApiStatus(enabled ? "online" : "disabled");
-      } else {
-        setApiEnabled(!enabled); // Revert
-      }
-    } catch {
-      setApiEnabled(!enabled);
-    }
-  };
-
-  // ──────── API Status ────────
+  /* ===== API status check ===== */
   const checkApiStatus = useCallback(async () => {
+    setCheckingStatus(true);
     setApiStatus("checking");
     try {
       const res = await fetch("/api/tracks");
@@ -334,331 +145,418 @@ export default function AdminPage() {
     } catch {
       setApiStatus("offline");
     }
+    setCheckingStatus(false);
   }, []);
 
-  // Poll API status every 30 seconds
+  /* ===== Init on auth ===== */
   useEffect(() => {
-    if (!isAuthed) return;
-    const interval = setInterval(checkApiStatus, 30000);
-    return () => clearInterval(interval);
-  }, [isAuthed, checkApiStatus]);
+    if (authed) {
+      fetchTracks();
+      fetchSettings();
+      checkApiStatus();
+    }
+  }, [authed, fetchTracks, fetchSettings, checkApiStatus]);
 
-  // ──────── UI Helpers ────────
-  const statusLabel = {
-    online: "API Online",
-    offline: "API Offline",
-    disabled: "API Disabled",
-    checking: "Checking…",
-  };
+  /* ===== Upload handler ===== */
+  async function handleUpload(e) {
+    e.preventDefault();
+    if (!file || !title.trim()) return;
 
-  const closeSidebar = () => setSidebarOpen(false);
+    const MAX_SIZE = 50 * 1024 * 1024;
+    const ALLOWED = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/webm", "audio/flac"];
 
-  // ═══════════════════════════════
-  // ██  LOGIN PAGE
-  // ═══════════════════════════════
-  if (!isAuthed) {
+    if (file.size > MAX_SIZE) {
+      setUploadMsg({ type: "error", text: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 50MB.` });
+      return;
+    }
+    if (!ALLOWED.includes(file.type)) {
+      setUploadMsg({ type: "error", text: `Unsupported format: ${file.type || "unknown"}. Use MP3, WAV, OGG, etc.` });
+      return;
+    }
+
+    setUploading(true);
+    setUploadMsg(null);
+
+    try {
+      if (!supabase) throw new Error("Supabase not configured");
+
+      const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+      const { error: storageError } = await supabase.storage
+        .from("music")
+        .upload(safeName, file, { contentType: file.type, upsert: false });
+
+      if (storageError) throw new Error(`Storage: ${storageError.message}`);
+
+      const { data: urlData } = supabase.storage.from("music").getPublicUrl(safeName);
+      const publicUrl = urlData?.publicUrl;
+      if (!publicUrl) throw new Error("Failed to get public URL");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          title: title.trim(),
+          file_name: safeName,
+          file_url: publicUrl,
+          tags: tags.trim(),
+          file_size: file.size,
+          mime_type: file.type,
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Upload failed");
+
+      setUploadMsg({ type: "success", text: `"${title.trim()}" uploaded successfully!` });
+      setTitle("");
+      setTags("");
+      setFile(null);
+      fetchTracks();
+    } catch (err) {
+      setUploadMsg({ type: "error", text: err.message });
+    }
+    setUploading(false);
+  }
+
+  /* ===== Delete track ===== */
+  async function deleteTrack(id, fileName) {
+    if (!confirm("Delete this track permanently?")) return;
+    try {
+      const res = await fetch(`/api/delete/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (res.ok) fetchTracks();
+    } catch {}
+  }
+
+  /* ===== Save settings ===== */
+  async function saveSettings() {
+    setSavingSettings(true);
+    setSettingsMsg(null);
+    try {
+      const body = {};
+      if (newUsername && newUsername !== settings.username) body.username = newUsername;
+      if (newPassword) body.new_password = newPassword;
+
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+
+      if (data.password_changed) adminPassword.current = newPassword;
+      setSettingsMsg({ type: "success", text: "Settings updated!" });
+      setNewPassword("");
+      fetchSettings();
+    } catch (err) {
+      setSettingsMsg({ type: "error", text: err.message });
+    }
+    setSavingSettings(false);
+  }
+
+  /* ===== Toggle API ===== */
+  async function toggleApi() {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ api_enabled: !settings.api_enabled }),
+      });
+      if (res.ok) {
+        fetchSettings();
+        setTimeout(checkApiStatus, 500);
+      }
+    } catch {}
+  }
+
+  /* ===== Copy helper ===== */
+  function copyCode(text, id) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }
+
+  /* ===== Format bytes ===== */
+  function formatSize(bytes) {
+    if (!bytes) return "";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  /* ===== Filtered library tracks ===== */
+  const filteredTracks = tracks.filter((t) =>
+    !librarySearch ||
+    t.title?.toLowerCase().includes(librarySearch.toLowerCase()) ||
+    t.tags?.some((tg) => tg.toLowerCase().includes(librarySearch.toLowerCase()))
+  );
+
+  /* =============================== */
+  /*         LOGIN PAGE              */
+  /* =============================== */
+  if (!authed) {
     return (
-      <>
-        <Head>
-          <title>Login — MyMusicAPI</title>
-        </Head>
-        <div className="login-page">
-          <div className="login-card">
-            <div className="login-brand">
-              <div className="logo">
-                My<span className="blue">Music</span>API
-              </div>
-              <div className="tagline">by SimplStudios</div>
-            </div>
-
-            <form className="login-form" onSubmit={login}>
-              {authError && <div className="login-error">{authError}</div>}
+      <div className="login-page">
+        <div className="login-card">
+          <div className="login-brand">
+            <Music size={40} />
+            <div className="logo">My<span className="blue">Music</span>API</div>
+            <div className="tagline">Admin Dashboard</div>
+          </div>
+          <form className="login-form" onSubmit={handleLogin}>
+            <div className="input-wrapper">
+              <Lock size={16} />
               <input
                 type="password"
-                placeholder="Admin password"
+                placeholder="Enter admin password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
               />
-              <button
-                type="submit"
-                className="btn btn-primary btn-full"
-                disabled={authLoading}
-              >
-                {authLoading ? "Verifying…" : "Login"}
-              </button>
-            </form>
-
-            <div
-              style={{
-                marginTop: "1.5rem",
-                fontSize: "0.75rem",
-                color: "var(--text-disabled)",
-              }}
-            >
-              <a
-                href="https://simplstudios.vercel.app"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                simplstudios.vercel.app
-              </a>
             </div>
-          </div>
+            {loginError && (
+              <div className="login-error">
+                <AlertTriangle size={16} />
+                {loginError}
+              </div>
+            )}
+            <button type="submit" className="btn btn-primary btn-full" disabled={loggingIn || !password}>
+              {loggingIn ? <><Loader size={16} /> Signing in...</> : "Sign In"}
+            </button>
+          </form>
         </div>
-      </>
+      </div>
     );
   }
 
-  // ═══════════════════════════════
-  // ██  DASHBOARD
-  // ═══════════════════════════════
+  /* =============================== */
+  /*        BASE URL FOR DOCS        */
+  /* =============================== */
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-app.vercel.app";
+
+  /* =============================== */
+  /*         STATUS LABEL            */
+  /* =============================== */
+  const statusLabels = {
+    online: "API Online",
+    offline: "API Offline",
+    disabled: "API Disabled",
+    checking: "Checking...",
+  };
+
+  /* =============================== */
+  /*         MAIN LAYOUT             */
+  /* =============================== */
   return (
     <>
-      <Head>
-        <title>Dashboard — MyMusicAPI</title>
-      </Head>
-
       {/* Mobile toggle */}
-      <button
-        className="sidebar-toggle"
-        onClick={() => setSidebarOpen((p) => !p)}
-        aria-label="Toggle menu"
-      >
-        ☰
+      <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
 
       {/* Overlay */}
       <div
         className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`}
-        onClick={closeSidebar}
+        onClick={() => setSidebarOpen(false)}
       />
 
       <div className="app-layout">
-        {/* ── Sidebar ── */}
+        {/* ===== Sidebar ===== */}
         <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
           <div className="sidebar-header">
             <div className="sidebar-logo">
-              <span className="logo-icon">♫</span>
-              My<span style={{ color: "var(--blue-500)" }}>Music</span>API
+              <Music size={22} />
+              MyMusicAPI
             </div>
             <div className="sidebar-subtitle">Admin Dashboard</div>
           </div>
 
           <nav className="sidebar-nav">
-            <div className="nav-label">Menu</div>
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.id}
-                className={`nav-item ${activeView === item.id ? "active" : ""}`}
-                onClick={() => {
-                  setActiveView(item.id);
-                  closeSidebar();
-                }}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
+            <div className="nav-label">Manage</div>
+            {NAV_ITEMS.filter((n) => n.section === "manage").map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  className={`nav-item ${view === item.id ? "active" : ""}`}
+                  onClick={() => { setView(item.id); setSidebarOpen(false); }}
+                >
+                  <Icon size={18} />
+                  {item.label}
+                </button>
+              );
+            })}
 
-            <div className="nav-label">Quick Links</div>
-            <a href="/" className="nav-item" target="_blank" rel="noopener noreferrer">
-              <span className="nav-icon">🌐</span> Public Page
-            </a>
-            <a
-              href="https://github.com/SimplStudios/my-music-api"
-              className="nav-item"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span className="nav-icon">📦</span> GitHub
-            </a>
+            <div className="nav-label">System</div>
+            {NAV_ITEMS.filter((n) => n.section === "system").map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  className={`nav-item ${view === item.id ? "active" : ""}`}
+                  onClick={() => { setView(item.id); setSidebarOpen(false); }}
+                >
+                  <Icon size={18} />
+                  {item.label}
+                </button>
+              );
+            })}
           </nav>
 
           {/* API Status */}
           <div className="sidebar-status">
             <div className="status-indicator">
-              <span className={`status-dot ${apiEnabled ? apiStatus : "disabled"}`} />
-              <span>{apiEnabled ? statusLabel[apiStatus] : "API Disabled"}</span>
+              <span className={`status-dot ${apiStatus}`} />
+              {statusLabels[apiStatus]}
+              <button
+                className="btn-ghost"
+                onClick={checkApiStatus}
+                disabled={checkingStatus}
+                style={{ marginLeft: "auto", padding: "0.2rem" }}
+              >
+                <RefreshCw size={13} className={checkingStatus ? "spin" : ""} />
+              </button>
             </div>
           </div>
 
-          {/* User / Footer */}
+          {/* User / Logout */}
           <div className="sidebar-footer">
             <div className="sidebar-user">
               <div className="user-avatar">
-                {username.charAt(0).toUpperCase()}
+                {(settings.username || "A").charAt(0).toUpperCase()}
               </div>
               <div className="user-info">
-                <div className="user-name">{username}</div>
+                <div className="user-name">{settings.username || "Admin"}</div>
                 <div className="user-role">Administrator</div>
               </div>
               <button
-                className="btn-ghost btn-sm"
+                className="logout-btn"
+                title="Sign out"
                 onClick={() => {
-                  setIsAuthed(false);
+                  setAuthed(false);
                   setPassword("");
+                  adminPassword.current = "";
                 }}
-                title="Logout"
-                style={{ fontSize: "1rem", padding: "0.3rem" }}
               >
-                ↗
+                <LogOut size={16} />
               </button>
             </div>
           </div>
         </aside>
 
-        {/* ── Main Content ── */}
+        {/* ===== Main Content ===== */}
         <main className="main-content">
           <div className="content-inner">
-            {/* ════════ Upload View ════════ */}
-            {activeView === "upload" && (
+
+            {/* -------- UPLOAD -------- */}
+            {view === "upload" && (
               <>
                 <div className="page-header">
-                  <h1>Upload Track</h1>
-                  <p>Add new music to your API library</p>
+                  <h1><Upload size={22} /> Upload Track</h1>
+                  <p>Add new music to your library. Files are stored in Supabase Storage.</p>
                 </div>
 
                 <div className="card">
-                  <form onSubmit={upload}>
+                  <form onSubmit={handleUpload}>
                     <div className="form-group">
-                      <label htmlFor="file-input">Audio File</label>
+                      <label>Track Title</label>
                       <input
-                        id="file-input"
-                        type="file"
-                        accept="audio/*"
-                        onChange={handleFileChange}
-                      />
-                      {file && (
-                        <span className="file-info">
-                          {file.name} — {formatBytes(file.size)}
-                        </span>
-                      )}
-                      <span className="file-info">
-                        Max 50 MB · MP3, WAV, OGG, FLAC, AAC, WebM, M4A
-                      </span>
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="title-input">Title</label>
-                      <input
-                        id="title-input"
                         type="text"
-                        placeholder="Track title"
+                        placeholder="e.g. Battle Theme"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                       />
                     </div>
-
                     <div className="form-group">
-                      <label htmlFor="tags-input">Tags</label>
+                      <label>Tags (comma separated)</label>
                       <input
-                        id="tags-input"
                         type="text"
-                        placeholder="battle, ambient, boss (comma-separated)"
+                        placeholder="e.g. battle, boss, intense"
                         value={tags}
                         onChange={(e) => setTags(e.target.value)}
                       />
                     </div>
+                    <div className="form-group">
+                      <label>Audio File</label>
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      />
+                      <span className="file-info">Max 50MB — MP3, WAV, OGG, FLAC</span>
+                    </div>
 
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={uploading || !file}
-                    >
-                      {uploading ? "Uploading…" : "Upload Track"}
+                    <button type="submit" className="btn btn-primary" disabled={uploading || !file || !title.trim()}>
+                      {uploading ? <><Loader size={16} /> Uploading...</> : <><Upload size={16} /> Upload Track</>}
                     </button>
 
                     {uploadMsg && (
-                      <div className={`message message-${uploadMsgType}`}>
-                        {uploadMsg}
+                      <div className={`message message-${uploadMsg.type}`}>
+                        {uploadMsg.type === "success" ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                        {uploadMsg.text}
                       </div>
                     )}
                   </form>
                 </div>
-
-                {/* Quick API Reference */}
-                <div className="card">
-                  <div className="card-header">
-                    <h2>API Reference</h2>
-                    <span className="card-badge">Quick Ref</span>
-                  </div>
-                  <div className="api-ref-item">
-                    <span className="api-method">GET</span>
-                    <span className="api-path">/api/tracks</span>
-                    <span className="api-desc">All tracks</span>
-                  </div>
-                  <div className="api-ref-item">
-                    <span className="api-method">GET</span>
-                    <span className="api-path">/api/tracks?tag=battle</span>
-                    <span className="api-desc">Filter by tag</span>
-                  </div>
-                  <div className="api-ref-item">
-                    <span className="api-method">GET</span>
-                    <span className="api-path">/api/random</span>
-                    <span className="api-desc">Random track</span>
-                  </div>
-                  <div className="api-ref-item">
-                    <span className="api-method">GET</span>
-                    <span className="api-path">/api/tracks/[id]</span>
-                    <span className="api-desc">Single track</span>
-                  </div>
-                </div>
               </>
             )}
 
-            {/* ════════ Library View ════════ */}
-            {activeView === "library" && (
+            {/* -------- LIBRARY -------- */}
+            {view === "library" && (
               <>
                 <div className="page-header">
-                  <h1>Library</h1>
-                  <p>
-                    {tracks.length} track{tracks.length !== 1 ? "s" : ""} in
-                    your collection
-                  </p>
+                  <h1><Library size={22} /> Music Library</h1>
+                  <p>{tracks.length} track{tracks.length !== 1 ? "s" : ""} in your collection</p>
                 </div>
 
-                {tracksLoading ? (
-                  <div className="loading-text">Loading tracks…</div>
-                ) : tracks.length === 0 ? (
+                {/* Search */}
+                <div className="search-bar" style={{ marginBottom: "1rem" }}>
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    placeholder="Search tracks or tags..."
+                    value={librarySearch}
+                    onChange={(e) => setLibrarySearch(e.target.value)}
+                    style={{ paddingLeft: "2.5rem" }}
+                  />
+                </div>
+
+                {loadingTracks ? (
+                  <div className="loading-text"><Loader size={18} /> Loading tracks...</div>
+                ) : filteredTracks.length === 0 ? (
                   <div className="empty-state">
-                    <div className="empty-icon">♫</div>
-                    <p>No tracks yet. Upload your first one!</p>
+                    <FileAudio size={48} />
+                    <p>{librarySearch ? "No tracks match your search." : "No tracks yet. Upload some music!"}</p>
                   </div>
                 ) : (
                   <div className="track-list">
-                    {tracks.map((track, i) => (
-                      <div className="track-item" key={track.id}>
+                    {filteredTracks.map((track, i) => (
+                      <div key={track.id} className="track-item">
                         <span className="track-number">{i + 1}</span>
                         <div className="track-info">
                           <div className="track-title">{track.title}</div>
                           <div className="track-meta">
-                            {track.tags?.map((tag) => (
-                              <span key={tag} className="tag">
-                                {tag}
-                              </span>
+                            {track.tags?.map((tg) => (
+                              <span key={tg} className="tag">{tg}</span>
                             ))}
-                            {track.file_size && (
-                              <span className="track-size">
-                                {formatBytes(track.file_size)}
-                              </span>
+                            {track.file_size > 0 && (
+                              <span className="track-size">{formatSize(track.file_size)}</span>
                             )}
                           </div>
                         </div>
                         <div className="track-actions">
-                          {track.file_url && (
-                            <audio controls preload="none">
-                              <source
-                                src={track.file_url}
-                                type={track.mime_type || "audio/mpeg"}
-                              />
-                            </audio>
-                          )}
+                          <audio controls preload="none" src={track.file_url} />
                           <button
                             className="btn btn-danger btn-sm"
-                            onClick={() => deleteTrack(track.id)}
+                            onClick={() => deleteTrack(track.id, track.file_name)}
+                            title="Delete track"
                           >
-                            Delete
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
@@ -668,200 +566,416 @@ export default function AdminPage() {
               </>
             )}
 
-            {/* ════════ Settings View ════════ */}
-            {activeView === "settings" && (
+            {/* -------- API DOCS -------- */}
+            {view === "docs" && (
               <>
                 <div className="page-header">
-                  <h1>Settings</h1>
-                  <p>Manage your profile, security, and API access</p>
+                  <h1><BookOpen size={22} /> API Documentation</h1>
+                  <p>Use these endpoints to play music in your HTML games and apps.</p>
                 </div>
 
-                {settingsMsg && (
-                  <div className={`message message-${settingsMsgType}`}>
-                    {settingsMsg}
-                  </div>
-                )}
-
-                {/* Profile */}
+                {/* Base URL */}
                 <div className="card">
-                  <div className="settings-section">
-                    <h3>👤 Profile</h3>
-                    <div className="settings-row">
-                      <div className="form-group">
-                        <label>Username</label>
-                        <input
-                          type="text"
-                          value={editUsername}
-                          onChange={(e) => setEditUsername(e.target.value)}
-                          placeholder="Your display name"
-                        />
-                      </div>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={saveProfile}
-                        disabled={saving}
-                        style={{ marginBottom: "1rem" }}
-                      >
-                        {saving ? "Saving…" : "Save"}
+                  <div className="card-header">
+                    <h2><Globe size={18} /> Base URL</h2>
+                  </div>
+                  <div className="api-doc-block">
+                    <div className="endpoint-badge">
+                      {baseUrl}
+                      <button className="copy-btn" onClick={() => copyCode(baseUrl, "base-url")}>
+                        {copiedId === "base-url" ? <Check size={13} /> : <Copy size={13} />}
                       </button>
                     </div>
+                    <p>All endpoints below are relative to this base URL.</p>
                   </div>
                 </div>
 
-                {/* Security */}
+                {/* GET /api/tracks */}
                 <div className="card">
-                  <div className="settings-section">
-                    <h3>🔒 Security</h3>
-                    <p
-                      style={{
-                        fontSize: "0.8rem",
-                        color: "var(--text-muted)",
-                        marginBottom: "1rem",
-                      }}
-                    >
-                      Change your admin password. This overrides the environment
-                      variable.
-                    </p>
-                    <div className="form-group">
-                      <label>New Password</label>
-                      <input
-                        type="password"
-                        placeholder="New password (min 6 characters)"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                      />
+                  <div className="card-header">
+                    <h2><Library size={18} /> List All Tracks</h2>
+                  </div>
+                  <div className="api-doc-block">
+                    <div className="endpoint-badge">
+                      <span className="method">GET</span> /api/tracks
                     </div>
-                    <div className="form-group">
-                      <label>Confirm New Password</label>
-                      <input
-                        type="password"
-                        placeholder="Confirm password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                      />
-                    </div>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={changePassword}
-                      disabled={saving}
-                    >
-                      {saving ? "Saving…" : "Change Password"}
+                    <p>Returns all tracks in your library. Supports optional query parameters for filtering.</p>
+                    <p><strong>Query Parameters:</strong></p>
+                    <pre>{`?tag=battle      Filter by tag
+?search=epic     Search by title
+?limit=10        Limit number of results
+?tag=boss&limit=5  Combine parameters`}</pre>
+                    <br/>
+                    <p><strong>Response:</strong></p>
+                    <pre>{`{
+  "tracks": [
+    {
+      "id": 1,
+      "title": "Battle Theme",
+      "file_url": "https://...supabase.co/storage/v1/.../battle.mp3",
+      "tags": ["battle", "intense"],
+      "file_size": 3145728,
+      "mime_type": "audio/mpeg",
+      "created_at": "2024-01-15T..."
+    }
+  ]
+}`}</pre>
+                    <button className="copy-btn" onClick={() => copyCode(
+`fetch("${baseUrl}/api/tracks")
+  .then(res => res.json())
+  .then(data => console.log(data.tracks));`, "tracks-code")}>
+                      {copiedId === "tracks-code" ? <><Check size={13} /> Copied!</> : <><Copy size={13} /> Copy example</>}
                     </button>
                   </div>
                 </div>
 
-                {/* API Control */}
+                {/* GET /api/random */}
+                <div className="card">
+                  <div className="card-header">
+                    <h2><Shuffle size={18} /> Get Random Track</h2>
+                  </div>
+                  <div className="api-doc-block">
+                    <div className="endpoint-badge">
+                      <span className="method">GET</span> /api/random
+                    </div>
+                    <p>Returns a single random track. Great for background music in games.</p>
+                    <p><strong>Query Parameters:</strong></p>
+                    <pre>{`?tag=ambient     Get a random track with a specific tag`}</pre>
+                    <br/>
+                    <p><strong>Response:</strong></p>
+                    <pre>{`{
+  "track": {
+    "id": 3,
+    "title": "Forest Ambience",
+    "file_url": "https://...supabase.co/storage/v1/.../forest.mp3",
+    "tags": ["ambient", "nature"]
+  }
+}`}</pre>
+                    <button className="copy-btn" onClick={() => copyCode(
+`fetch("${baseUrl}/api/random?tag=battle")
+  .then(res => res.json())
+  .then(data => {
+    const audio = new Audio(data.track.file_url);
+    audio.play();
+  });`, "random-code")}>
+                      {copiedId === "random-code" ? <><Check size={13} /> Copied!</> : <><Copy size={13} /> Copy example</>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* GET /api/tracks/:id */}
+                <div className="card">
+                  <div className="card-header">
+                    <h2><FileAudio size={18} /> Get Track by ID</h2>
+                  </div>
+                  <div className="api-doc-block">
+                    <div className="endpoint-badge">
+                      <span className="method">GET</span> /api/tracks/:id
+                    </div>
+                    <p>Fetch a specific track by its ID.</p>
+                    <p><strong>Response:</strong></p>
+                    <pre>{`{
+  "track": {
+    "id": 1,
+    "title": "Battle Theme",
+    "file_url": "https://...",
+    "tags": ["battle"]
+  }
+}`}</pre>
+                  </div>
+                </div>
+
+                {/* HTML Game Integration */}
+                <div className="card">
+                  <div className="card-header">
+                    <h2><Code size={18} /> HTML Game Integration</h2>
+                  </div>
+                  <div className="api-doc-block">
+                    <h4><Play size={16} /> Quick Start — Play a Random Track</h4>
+                    <p>Drop this into any HTML file to instantly play music:</p>
+                    <pre>{`<script>
+  fetch("${baseUrl}/api/random")
+    .then(r => r.json())
+    .then(data => {
+      const music = new Audio(data.track.file_url);
+      music.loop = true;
+      music.volume = 0.5;
+      document.addEventListener("click", () => music.play(), { once: true });
+    });
+</script>`}</pre>
+                    <button className="copy-btn" onClick={() => copyCode(
+`<script>
+  fetch("${baseUrl}/api/random")
+    .then(r => r.json())
+    .then(data => {
+      const music = new Audio(data.track.file_url);
+      music.loop = true;
+      music.volume = 0.5;
+      document.addEventListener("click", () => music.play(), { once: true });
+    });
+</script>`, "quick-start")}>
+                      {copiedId === "quick-start" ? <><Check size={13} /> Copied!</> : <><Copy size={13} /> Copy code</>}
+                    </button>
+                  </div>
+
+                  <div className="divider" />
+
+                  <div className="api-doc-block">
+                    <h4><Zap size={16} /> Full GameMusic Class</h4>
+                    <p>A reusable class for managing music in your HTML games with play, pause, skip, and volume controls:</p>
+                    <pre>{`<script>
+class GameMusic {
+  constructor(apiBase) {
+    this.api = apiBase;
+    this.audio = new Audio();
+    this.audio.loop = true;
+    this.audio.volume = 0.4;
+    this.tracks = [];
+    this.current = 0;
+  }
+
+  async loadPlaylist(tag = "") {
+    const url = tag
+      ? this.api + "/api/tracks?tag=" + tag
+      : this.api + "/api/tracks";
+    const res = await fetch(url);
+    const data = await res.json();
+    this.tracks = data.tracks || [];
+  }
+
+  play(index) {
+    if (index !== undefined) this.current = index;
+    if (!this.tracks[this.current]) return;
+    this.audio.src = this.tracks[this.current].file_url;
+    this.audio.play();
+  }
+
+  pause()  { this.audio.pause(); }
+  resume() { this.audio.play(); }
+  next()   { this.current = (this.current + 1) % this.tracks.length; this.play(); }
+  prev()   { this.current = (this.current - 1 + this.tracks.length) % this.tracks.length; this.play(); }
+
+  setVolume(v) { this.audio.volume = Math.max(0, Math.min(1, v)); }
+}
+
+// Usage:
+const music = new GameMusic("${baseUrl}");
+await music.loadPlaylist("battle");
+music.play();
+</script>`}</pre>
+                    <button className="copy-btn" onClick={() => copyCode(
+`class GameMusic {
+  constructor(apiBase) {
+    this.api = apiBase;
+    this.audio = new Audio();
+    this.audio.loop = true;
+    this.audio.volume = 0.4;
+    this.tracks = [];
+    this.current = 0;
+  }
+
+  async loadPlaylist(tag = "") {
+    const url = tag
+      ? this.api + "/api/tracks?tag=" + tag
+      : this.api + "/api/tracks";
+    const res = await fetch(url);
+    const data = await res.json();
+    this.tracks = data.tracks || [];
+  }
+
+  play(index) {
+    if (index !== undefined) this.current = index;
+    if (!this.tracks[this.current]) return;
+    this.audio.src = this.tracks[this.current].file_url;
+    this.audio.play();
+  }
+
+  pause()  { this.audio.pause(); }
+  resume() { this.audio.play(); }
+  next()   { this.current = (this.current + 1) % this.tracks.length; this.play(); }
+  prev()   { this.current = (this.current - 1 + this.tracks.length) % this.tracks.length; this.play(); }
+
+  setVolume(v) { this.audio.volume = Math.max(0, Math.min(1, v)); }
+}
+
+const music = new GameMusic("${baseUrl}");
+await music.loadPlaylist("battle");
+music.play();`, "game-class")}>
+                      {copiedId === "game-class" ? <><Check size={13} /> Copied!</> : <><Copy size={13} /> Copy class</>}
+                    </button>
+                  </div>
+
+                  <div className="divider" />
+
+                  <div className="api-doc-block">
+                    <h4><Tag size={16} /> Filter by Tag</h4>
+                    <p>Load tracks by tag for different game scenes:</p>
+                    <pre>{`// Load battle music
+fetch("${baseUrl}/api/tracks?tag=battle")
+  .then(r => r.json())
+  .then(data => {
+    // data.tracks = array of battle tracks
+  });
+
+// Load ambient/menu music
+fetch("${baseUrl}/api/tracks?tag=menu")
+  .then(r => r.json())
+  .then(data => { ... });`}</pre>
+                  </div>
+                </div>
+
+                {/* Endpoint Reference Table */}
+                <div className="card">
+                  <div className="card-header">
+                    <h2><Hash size={18} /> Endpoint Reference</h2>
+                  </div>
+                  <div className="api-ref-item">
+                    <span className="api-method">GET</span>
+                    <span className="api-path">/api/tracks</span>
+                    <span className="api-desc">List all tracks</span>
+                  </div>
+                  <div className="api-ref-item">
+                    <span className="api-method">GET</span>
+                    <span className="api-path">/api/tracks?tag=battle</span>
+                    <span className="api-desc">Filter by tag</span>
+                  </div>
+                  <div className="api-ref-item">
+                    <span className="api-method">GET</span>
+                    <span className="api-path">/api/tracks?search=epic</span>
+                    <span className="api-desc">Search by title</span>
+                  </div>
+                  <div className="api-ref-item">
+                    <span className="api-method">GET</span>
+                    <span className="api-path">/api/random</span>
+                    <span className="api-desc">Random track</span>
+                  </div>
+                  <div className="api-ref-item">
+                    <span className="api-method">GET</span>
+                    <span className="api-path">/api/random?tag=ambient</span>
+                    <span className="api-desc">Random by tag</span>
+                  </div>
+                  <div className="api-ref-item">
+                    <span className="api-method">GET</span>
+                    <span className="api-path">/api/tracks/:id</span>
+                    <span className="api-desc">Get track by ID</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* -------- SETTINGS -------- */}
+            {view === "settings" && (
+              <>
+                <div className="page-header">
+                  <h1><Settings size={22} /> Settings</h1>
+                  <p>Manage your profile, security, and API access.</p>
+                </div>
+
+                {/* Profile */}
                 <div className="card">
                   <div className="settings-section">
-                    <h3>🔌 API Access</h3>
-                    <div
-                      className="toggle-wrapper"
-                      onClick={() => toggleApi(!apiEnabled)}
-                    >
-                      <div className="toggle-label">
-                        <strong>Public API</strong>
-                        <span>
-                          {apiEnabled
-                            ? "Your API is live. Games can fetch tracks."
-                            : "API is disabled. All public endpoints return 503."}
-                        </span>
-                      </div>
-                      <div className="toggle">
-                        <input
-                          type="checkbox"
-                          checked={apiEnabled}
-                          readOnly
-                        />
-                        <span className="toggle-slider" />
-                      </div>
+                    <h3><User size={18} /> Profile</h3>
+                    <div className="form-group">
+                      <label>Display Name</label>
+                      <input
+                        type="text"
+                        value={newUsername}
+                        onChange={(e) => setNewUsername(e.target.value)}
+                        placeholder="Admin"
+                      />
                     </div>
                   </div>
 
                   <div className="divider" />
 
-                  <div className="settings-section" style={{ marginBottom: 0 }}>
-                    <h3>📡 API Status</h3>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.75rem",
-                        padding: "0.75rem 1rem",
-                        background: "var(--bg-surface)",
-                        borderRadius: "var(--radius-xl)",
-                      }}
-                    >
-                      <span
-                        className={`status-dot ${apiEnabled ? apiStatus : "disabled"}`}
+                  {/* Security */}
+                  <div className="settings-section">
+                    <h3><Lock size={18} /> Security</h3>
+                    <div className="settings-hint">
+                      Set a new password. This overrides the ADMIN_PASSWORD environment variable.
+                    </div>
+                    <div className="form-group">
+                      <label>New Password</label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Leave blank to keep current"
                       />
-                      <div>
-                        <div
-                          style={{
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
-                            fontSize: "0.9rem",
-                          }}
-                        >
-                          {apiEnabled ? statusLabel[apiStatus] : "API Disabled"}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          {apiEnabled
-                            ? apiStatus === "online"
-                              ? "All endpoints are responding normally."
-                              : apiStatus === "checking"
-                                ? "Pinging endpoints…"
-                                : "Endpoints are not responding."
-                            : "Enable the API toggle above to go live."}
+                    </div>
+                  </div>
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={saveSettings}
+                    disabled={savingSettings}
+                  >
+                    {savingSettings ? <><Loader size={16} /> Saving...</> : "Save Changes"}
+                  </button>
+
+                  {settingsMsg && (
+                    <div className={`message message-${settingsMsg.type}`}>
+                      {settingsMsg.type === "success" ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                      {settingsMsg.text}
+                    </div>
+                  )}
+                </div>
+
+                <div className="divider" />
+
+                {/* API Toggle */}
+                <div className="card">
+                  <div className="settings-section">
+                    <h3><Power size={18} /> API Kill Switch</h3>
+                    <div className="settings-hint">
+                      When disabled, all public API endpoints (/api/tracks, /api/random) will return 503.
+                    </div>
+
+                    <div className="toggle-wrapper" onClick={toggleApi}>
+                      <div className="toggle-label">
+                        <strong>Public API Access</strong>
+                        <span>{settings.api_enabled ? "Anyone can fetch your tracks" : "All public endpoints are disabled"}</span>
+                      </div>
+                      <label className="toggle" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={settings.api_enabled}
+                          onChange={toggleApi}
+                        />
+                        <span className="toggle-slider" />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* API Status */}
+                <div className="card">
+                  <div className="settings-section">
+                    <h3><Radio size={18} /> API Status</h3>
+                    <div className="status-card">
+                      <span className={`status-dot ${apiStatus}`} />
+                      <div className="status-info">
+                        <div className="status-title">{statusLabels[apiStatus]}</div>
+                        <div className="status-desc">
+                          {apiStatus === "online" && "Endpoints are responding normally."}
+                          {apiStatus === "offline" && "Endpoints are not reachable. Check Vercel logs."}
+                          {apiStatus === "disabled" && "You turned off API access via the kill switch."}
+                          {apiStatus === "checking" && "Testing endpoint connectivity..."}
                         </div>
                       </div>
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={checkApiStatus}
-                        style={{ marginLeft: "auto" }}
+                        disabled={checkingStatus}
                       >
-                        ↻ Refresh
+                        <RefreshCw size={14} />
                       </button>
                     </div>
                   </div>
                 </div>
-
-                {/* Danger Zone */}
-                <div
-                  className="card"
-                  style={{
-                    borderColor: "rgba(239, 68, 68, 0.3)",
-                  }}
-                >
-                  <div className="settings-section" style={{ marginBottom: 0 }}>
-                    <h3 style={{ color: "var(--red-500)" }}>⚠ Danger Zone</h3>
-                    <p
-                      style={{
-                        fontSize: "0.8rem",
-                        color: "var(--text-muted)",
-                        marginBottom: "1rem",
-                      }}
-                    >
-                      Session logout. You will need to enter your password again
-                      to access the dashboard.
-                    </p>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => {
-                        setIsAuthed(false);
-                        setPassword("");
-                      }}
-                    >
-                      Logout
-                    </button>
-                  </div>
-                </div>
               </>
             )}
+
           </div>
         </main>
       </div>

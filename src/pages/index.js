@@ -1,234 +1,183 @@
 import { useState, useEffect } from "react";
-import Head from "next/head";
+import {
+  Music,
+  Github,
+  Heart,
+  Search,
+  FileAudio,
+  Code,
+  ExternalLink,
+  Loader,
+  DollarSign,
+} from "lucide-react";
 
 export default function HomePage() {
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState("");
-  const [allTags, setAllTags] = useState([]);
 
   useEffect(() => {
-    fetchTracks();
+    fetch("/api/tracks")
+      .then((r) => r.json())
+      .then((data) => setTracks(data.tracks || []))
+      .catch(() => setTracks([]))
+      .finally(() => setLoading(false));
   }, []);
 
-  const fetchTracks = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/tracks");
-      if (res.ok) {
-        const data = await res.json();
-        const t = data.tracks || [];
-        setTracks(t);
+  /* ===== Unique tags ===== */
+  const allTags = [...new Set(tracks.flatMap((t) => t.tags || []))].sort();
 
-        // Collect all unique tags
-        const tagSet = new Set();
-        t.forEach((track) =>
-          track.tags?.forEach((tag) => tagSet.add(tag))
-        );
-        setAllTags([...tagSet].sort());
-      }
-    } catch {}
-    setLoading(false);
-  };
-
+  /* ===== Filtered tracks ===== */
   const filtered = tracks.filter((t) => {
-    const matchSearch =
-      !search || t.title.toLowerCase().includes(search.toLowerCase());
-    const matchTag = !activeTag || t.tags?.includes(activeTag);
-    return matchSearch && matchTag;
+    const matchesSearch = !search || t.title?.toLowerCase().includes(search.toLowerCase());
+    const matchesTag = !activeTag || t.tags?.includes(activeTag);
+    return matchesSearch && matchesTag;
   });
 
-  function formatBytes(bytes) {
-    if (!bytes) return "";
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / 1048576).toFixed(1) + " MB";
-  }
-
-  const baseUrl =
-    typeof window !== "undefined" ? window.location.origin : "";
+  /* ===== Base URL ===== */
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-app.vercel.app";
 
   return (
-    <>
-      <Head>
-        <title>MyMusicAPI — Free Music API for Games</title>
-        <meta
-          name="description"
-          content="Open-source music API for HTML games. Browse, stream, and integrate game-ready tracks with a simple REST API."
-        />
-      </Head>
-
-      <div className="public-page">
-        {/* Header */}
-        <header className="public-header">
-          <h1>
-            My<span className="blue">Music</span>API
-          </h1>
-          <p className="subtitle">
-            Open-source music API for your games — built by SimplStudios
-          </p>
-          <div className="header-links">
-            <a
-              href="https://github.com/SimplStudios/my-music-api"
-              className="btn btn-secondary btn-sm"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              📦 GitHub
-            </a>
-            <a
-              href="https://cash.app/$simplstudiosofficial"
-              className="btn btn-primary btn-sm"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              ♥ Donate
-            </a>
-            <a href="/admin" className="btn btn-ghost btn-sm">
-              Admin →
-            </a>
-          </div>
-        </header>
-
-        {/* Search */}
-        <div className="search-bar">
-          <input
-            type="text"
-            placeholder="Search tracks…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+    <div className="public-page">
+      {/* Header */}
+      <header className="public-header">
+        <Music size={48} />
+        <h1>My<span className="blue">Music</span>API</h1>
+        <p className="subtitle">Self-hosted music API for your HTML games and apps</p>
+        <div className="header-links">
+          <a
+            href="https://github.com/SimplStudios/my-music-api"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+          >
+            <Github size={16} /> GitHub
+          </a>
+          <a
+            href="https://cash.app/$simplstudiosofficial"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+          >
+            <Heart size={16} /> Donate
+          </a>
+          <a href="/admin" className="btn btn-primary">
+            Admin Dashboard <ExternalLink size={14} />
+          </a>
         </div>
+      </header>
 
-        {/* Tag filter */}
-        {allTags.length > 0 && (
-          <div className="tag-filter">
+      {/* Search */}
+      <div className="search-bar">
+        <Search size={16} />
+        <input
+          type="text"
+          placeholder="Search tracks..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ paddingLeft: "2.5rem" }}
+        />
+      </div>
+
+      {/* Tag Filter */}
+      {allTags.length > 0 && (
+        <div className="tag-filter">
+          <button
+            className={`tag-btn ${!activeTag ? "active" : ""}`}
+            onClick={() => setActiveTag("")}
+          >
+            All
+          </button>
+          {allTags.map((tag) => (
             <button
-              className={`tag-btn ${activeTag === "" ? "active" : ""}`}
-              onClick={() => setActiveTag("")}
+              key={tag}
+              className={`tag-btn ${activeTag === tag ? "active" : ""}`}
+              onClick={() => setActiveTag(activeTag === tag ? "" : tag)}
             >
-              All
+              {tag}
             </button>
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                className={`tag-btn ${activeTag === tag ? "active" : ""}`}
-                onClick={() => setActiveTag(activeTag === tag ? "" : tag)}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
-        {/* Track list */}
-        {loading ? (
-          <div className="loading-text">Loading tracks…</div>
-        ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">♫</div>
-            <p>
-              {search || activeTag
-                ? "No tracks match your filter."
-                : "No tracks uploaded yet."}
-            </p>
-          </div>
-        ) : (
-          <div className="track-list">
-            {filtered.map((track, i) => (
-              <div className="track-item" key={track.id}>
-                <span className="track-number">{i + 1}</span>
-                <div className="track-info">
-                  <div className="track-title">{track.title}</div>
-                  <div className="track-meta">
-                    {track.tags?.map((tag) => (
-                      <span key={tag} className="tag">
-                        {tag}
-                      </span>
-                    ))}
-                    {track.file_size && (
-                      <span className="track-size">
-                        {formatBytes(track.file_size)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="track-actions">
-                  {track.file_url && (
-                    <audio controls preload="none">
-                      <source
-                        src={track.file_url}
-                        type={track.mime_type || "audio/mpeg"}
-                      />
-                    </audio>
-                  )}
+      {/* Track List */}
+      {loading ? (
+        <div className="loading-text"><Loader size={18} /> Loading tracks...</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">
+          <FileAudio size={48} />
+          <p>{search || activeTag ? "No tracks match your filters." : "No tracks available yet."}</p>
+        </div>
+      ) : (
+        <div className="track-list">
+          {filtered.map((track, i) => (
+            <div key={track.id} className="track-item">
+              <span className="track-number">{i + 1}</span>
+              <div className="track-info">
+                <div className="track-title">{track.title}</div>
+                <div className="track-meta">
+                  {track.tags?.map((tg) => (
+                    <span key={tg} className="tag">{tg}</span>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="track-actions">
+                <audio controls preload="none" src={track.file_url} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-        {/* API usage example */}
-        <div className="code-card">
-          <div className="code-card-header">
-            <span>💻</span>
-            <h3>Use in Your Game</h3>
-          </div>
-          <pre>{`// Fetch all tracks
-fetch("${baseUrl || "https://your-app.vercel.app"}/api/tracks")
-  .then(res => res.json())
-  .then(data => {
-    const tracks = data.tracks;
-    const audio = new Audio(tracks[0].file_url);
-    audio.play();
-  });
+      {/* Quick Start Code Card */}
+      <div className="code-card">
+        <div className="code-card-header">
+          <Code size={16} />
+          <h3>Quick Start</h3>
+        </div>
+        <pre><code>{`// Fetch all tracks
+const res = await fetch("${baseUrl}/api/tracks");
+const { tracks } = await res.json();
 
-// Get a random track
-fetch("${baseUrl || "https://your-app.vercel.app"}/api/random")
-  .then(res => res.json())
-  .then(data => {
-    const audio = new Audio(data.track.file_url);
-    audio.play();
-  });
+// Play a random track
+const random = await fetch("${baseUrl}/api/random");
+const { track } = await random.json();
+const audio = new Audio(track.file_url);
+audio.play();
 
 // Filter by tag
-fetch("${baseUrl || "https://your-app.vercel.app"}/api/tracks?tag=battle")
-  .then(res => res.json())
-  .then(data => console.log(data.tracks));`}</pre>
-        </div>
-
-        {/* Footer */}
-        <footer className="footer">
-          <p>
-            Built with ♥ by{" "}
-            <a
-              href="https://simplstudios.vercel.app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              SimplStudios
-            </a>
-          </p>
-          <p>
-            <a
-              href="https://github.com/SimplStudios/my-music-api"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              GitHub
-            </a>
-            {" · "}
-            <a
-              href="https://cash.app/$simplstudiosofficial"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Donate
-            </a>
-          </p>
-        </footer>
+const battle = await fetch("${baseUrl}/api/tracks?tag=battle");`}</code></pre>
       </div>
-    </>
+
+      {/* Footer */}
+      <footer className="footer">
+        <p>
+          Built by{" "}
+          <a href="https://simplstudios.vercel.app" target="_blank" rel="noopener noreferrer">
+            SimplStudios
+          </a>
+        </p>
+        <p>
+          <a
+            href="https://github.com/SimplStudios/my-music-api"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Github size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />
+            Source Code
+          </a>
+          {" · "}
+          <a
+            href="https://cash.app/$simplstudiosofficial"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Heart size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />
+            Donate
+          </a>
+        </p>
+      </footer>
+    </div>
   );
 }
