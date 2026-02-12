@@ -1,14 +1,9 @@
 import { useState, useEffect } from "react";
 import {
-  Music,
-  Github,
-  Heart,
   Search,
   FileAudio,
   Code,
-  ExternalLink,
   Loader,
-  DollarSign,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -42,7 +37,6 @@ export default function HomePage() {
     <div className="public-page">
       {/* Header */}
       <header className="public-header">
-        <Music size={48} />
         <h1>My<span className="blue">Music</span>API</h1>
         <p className="subtitle">Self-hosted music API for your HTML games and apps</p>
         <div className="header-links">
@@ -52,7 +46,7 @@ export default function HomePage() {
             rel="noopener noreferrer"
             className="btn btn-secondary"
           >
-            <Github size={16} /> GitHub
+            GitHub
           </a>
           <a
             href="https://cash.app/$simplstudiosofficial"
@@ -60,10 +54,10 @@ export default function HomePage() {
             rel="noopener noreferrer"
             className="btn btn-secondary"
           >
-            <Heart size={16} /> Donate
+            Donate
           </a>
           <a href="/admin" className="btn btn-primary">
-            Admin Dashboard <ExternalLink size={14} />
+            Admin Dashboard
           </a>
         </div>
       </header>
@@ -164,7 +158,6 @@ const battle = await fetch("${baseUrl}/api/tracks?tag=battle");`}</code></pre>
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Github size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />
             Source Code
           </a>
           {" · "}
@@ -173,7 +166,6 @@ const battle = await fetch("${baseUrl}/api/tracks?tag=battle");`}</code></pre>
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Heart size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />
             Donate
           </a>
         </p>
