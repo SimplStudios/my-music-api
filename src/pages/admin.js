@@ -1,4 +1,12 @@
 import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// Client-side Supabase for direct file uploads
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseClient = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 export default function AdminPage() {
   const [password, setPassword] = useState("");
@@ -7,6 +15,7 @@ export default function AdminPage() {
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   const [message, setMessage] = useState("");
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -27,21 +36,54 @@ export default function AdminPage() {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file || !supabaseClient) return;
 
     setUploading(true);
     setMessage("");
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("title", title || file.name);
-    formData.append("tags", tags);
+    setUploadProgress("Uploading file to storage...");
 
     try {
+      // Step 1: Upload file directly to Supabase Storage (no size limit from Vercel)
+      const trackTitle = (title || file.name).replace(/\.[^/.]+$/, "");
+      const ext = file.name.substring(file.name.lastIndexOf(".")) || ".mp3";
+      const fileName = `${Date.now()}-${trackTitle.replace(/\s+/g, "-").toLowerCase()}${ext}`;
+
+      const { data: uploadData, error: uploadError } = await supabaseClient.storage
+        .from("music")
+        .upload(fileName, file, {
+          contentType: file.type || "audio/mpeg",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        setMessage(`Upload error: ${uploadError.message}`);
+        setUploading(false);
+        setUploadProgress("");
+        return;
+      }
+
+      // Step 2: Get public URL
+      const { data: urlData } = supabaseClient.storage
+        .from("music")
+        .getPublicUrl(fileName);
+
+      setUploadProgress("Saving track info...");
+
+      // Step 3: Save metadata via our API (password-protected)
       const res = await fetch("/api/upload", {
         method: "POST",
-        headers: { "x-admin-password": password },
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": password,
+        },
+        body: JSON.stringify({
+          title: trackTitle,
+          file_name: fileName,
+          file_url: urlData.publicUrl,
+          tags: tags,
+          file_size: file.size,
+          mime_type: file.type,
+        }),
       });
 
       const data = await res.json();
@@ -51,7 +93,6 @@ export default function AdminPage() {
         setFile(null);
         setTitle("");
         setTags("");
-        // Reset file input
         document.getElementById("file-input").value = "";
         fetchTracks();
       } else {
@@ -62,6 +103,7 @@ export default function AdminPage() {
     }
 
     setUploading(false);
+    setUploadProgress("");
   };
 
   const handleDelete = async (id, trackTitle) => {
@@ -136,7 +178,7 @@ export default function AdminPage() {
             />
           </div>
           <button type="submit" disabled={uploading || !file}>
-            {uploading ? "Uploading..." : "Upload"}
+            {uploading ? uploadProgress || "Uploading..." : "Upload"}
           </button>
         </form>
         {message && <p className="message">{message}</p>}
