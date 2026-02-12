@@ -17,8 +17,11 @@ export default function AdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("success"); // "success" or "error"
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
   const login = (e) => {
     e.preventDefault();
@@ -26,17 +29,44 @@ export default function AdminPage() {
     fetchTracks();
   };
 
+  const showMessage = (text, type = "success") => {
+    setMessage(text);
+    setMessageType(type);
+  };
+
   const fetchTracks = async () => {
     setLoading(true);
-    const res = await fetch("/api/tracks");
-    const data = await res.json();
-    setTracks(data.tracks || []);
+    try {
+      const res = await fetch("/api/tracks");
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      setTracks(data.tracks || []);
+    } catch (err) {
+      showMessage(`Failed to load tracks: ${err.message}`, "error");
+    }
     setLoading(false);
   };
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!file || !supabaseClient) return;
+    if (!file) return;
+
+    if (!supabaseClient) {
+      showMessage("Supabase is not configured. Check your environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY).", "error");
+      return;
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      showMessage(`File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Maximum is 50MB.`, "error");
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith("audio/")) {
+      showMessage(`Invalid file type: "${file.type || "unknown"}". Please upload an audio file (.mp3, .wav, .ogg, etc).`, "error");
+      return;
+    }
 
     setUploading(true);
     setMessage("");
@@ -56,7 +86,15 @@ export default function AdminPage() {
         });
 
       if (uploadError) {
-        setMessage(`Upload error: ${uploadError.message}`);
+        let errorMsg = uploadError.message;
+        if (errorMsg.includes("Bucket not found")) {
+          errorMsg = 'Storage bucket "music" not found. Create a public bucket named "music" in your Supabase dashboard (Storage → New Bucket).';
+        } else if (errorMsg.includes("new row violates") || errorMsg.includes("policy")) {
+          errorMsg = 'Upload blocked by storage policy. Make sure your "music" bucket has an INSERT policy allowing the anon role.';
+        } else if (errorMsg.includes("413") || errorMsg.includes("too large")) {
+          errorMsg = `File is too large. Maximum upload size is 50MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`;
+        }
+        showMessage(errorMsg, "error");
         setUploading(false);
         setUploadProgress("");
         return;
@@ -89,17 +127,21 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage(`Uploaded: ${data.track.title}`);
+        showMessage(`✓ Uploaded: ${data.track.title} (${(file.size / 1024 / 1024).toFixed(1)}MB)`, "success");
         setFile(null);
         setTitle("");
         setTags("");
         document.getElementById("file-input").value = "";
         fetchTracks();
       } else {
-        setMessage(`Error: ${data.error}`);
+        let errorMsg = data.error;
+        if (res.status === 401) {
+          errorMsg = "Wrong admin password. Log out and try again.";
+        }
+        showMessage(errorMsg, "error");
       }
     } catch (err) {
-      setMessage(`Error: ${err.message}`);
+      showMessage(`Upload failed: ${err.message}. Check your internet connection and Supabase configuration.`, "error");
     }
 
     setUploading(false);
@@ -115,11 +157,20 @@ export default function AdminPage() {
     });
 
     if (res.ok) {
-      setMessage(`Deleted: ${trackTitle}`);
+      showMessage(`✓ Deleted: ${trackTitle}`, "success");
       fetchTracks();
     } else {
-      const data = await res.json();
-      setMessage(`Error: ${data.error}`);
+      let errorMsg;
+      try {
+        const data = await res.json();
+        errorMsg = data.error;
+      } catch {
+        errorMsg = `Server returned ${res.status}`;
+      }
+      if (res.status === 401) {
+        errorMsg = "Wrong admin password. Log out and try again.";
+      }
+      showMessage(errorMsg, "error");
     }
   };
 
@@ -150,7 +201,7 @@ export default function AdminPage() {
         <h2>Upload Track</h2>
         <form onSubmit={handleUpload} className="upload-form">
           <div className="field">
-            <label>Audio File</label>
+            <label>Audio File (max 50MB — .mp3, .wav, .ogg, .flac)</label>
             <input
               id="file-input"
               type="file"
@@ -158,6 +209,14 @@ export default function AdminPage() {
               onChange={(e) => setFile(e.target.files[0])}
               required
             />
+            {file && (
+              <span className="file-info">
+                {file.name} — {(file.size / 1024 / 1024).toFixed(1)}MB
+                {file.size > MAX_FILE_SIZE && (
+                  <span className="file-warning"> ⚠ Too large!</span>
+                )}
+              </span>
+            )}
           </div>
           <div className="field">
             <label>Title (optional, defaults to filename)</label>
@@ -181,7 +240,7 @@ export default function AdminPage() {
             {uploading ? uploadProgress || "Uploading..." : "Upload"}
           </button>
         </form>
-        {message && <p className="message">{message}</p>}
+        {message && <p className={`message ${messageType === "error" ? "message-error" : "message-success"}`}>{message}</p>}
       </div>
 
       {/* Track List */}

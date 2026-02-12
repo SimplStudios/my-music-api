@@ -115,9 +115,30 @@ button:disabled {
   margin-top: 1rem;
   padding: 0.7rem 1rem;
   border-radius: 8px;
+  word-break: break-word;
+}
+
+.message-success {
   background: #1a2a1a;
   border: 1px solid #2a4a2a;
   color: #8f8;
+}
+
+.message-error {
+  background: #2a1a1a;
+  border: 1px solid #4a2a2a;
+  color: #f88;
+}
+
+.file-info {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.2rem;
+}
+
+.file-warning {
+  color: #f88;
+  font-weight: 600;
 }
 
 /* Search */
